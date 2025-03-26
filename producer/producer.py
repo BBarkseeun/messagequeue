@@ -1,31 +1,41 @@
-import logging
 import pika
 import time
+import json
+from datetime import datetime
+import random
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s'
-)
-
-# 무한 반복 메시지 전송
-while True:
+# ✅ RabbitMQ 연결 재시도
+MAX_RETRIES = 10
+for i in range(MAX_RETRIES):
     try:
-        connection = pika.BlockingConnection(pika.ConnectionParameters('project_rabbitmq'))
-        channel = connection.channel()
+        connection = pika.BlockingConnection(pika.ConnectionParameters(host='rabbitmq'))
+        break
+    except pika.exceptions.AMQPConnectionError:
+        print(f"[!] RabbitMQ 연결 실패, 재시도 {i+1}/{MAX_RETRIES}...")
+        time.sleep(3)
+else:
+    raise Exception("RabbitMQ 연결 실패: 모든 재시도 실패")
 
-        channel.queue_declare(queue='task_queue', durable=True)
-        channel.basic_publish(
-            exchange='',
-            routing_key='task_queue',
-            body='Hello RabbitMQ!',
-            properties=pika.BasicProperties(delivery_mode=2)
-        )
+channel = connection.channel()
+channel.queue_declare(queue='hello')
 
-        logging.info("[x] Sent 'Hello RabbitMQ!'")
-        connection.close()
+count = 1
+while True:
+    data = {
+        "event": "order_created",
+        "timestamp": datetime.now().isoformat(),
+        "payload": {
+            "order_id": count,
+            "user": random.choice(["박세은", "박세련", "황예솔", "이우현"]),
+            "amount": round(random.uniform(10, 500), 2)
+        }
+    }
 
-        time.sleep(5)  # 5초마다 메시지 반복 전송
-    except pika.exceptions.AMQPConnectionError as e:
-        logging.error(f"Connection failed: {e}, retrying in 5 seconds...")
-        time.sleep(5)
+    message = json.dumps(data)
+    channel.basic_publish(exchange='',
+                          routing_key='hello',
+                          body=message)
+    print(f"[x] Sent JSON: {json.dumps(data, ensure_ascii=False)}")  # ������ 요기!
+    count += 1
+    time.sleep(5)
 

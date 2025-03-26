@@ -1,35 +1,38 @@
-import logging
 import pika
+import json
 import time
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s'
-)
+# ✅ RabbitMQ 연결 재시도 로직
+MAX_RETRIES = 10
+for i in range(MAX_RETRIES):
+    try:
+        connection = pika.BlockingConnection(pika.ConnectionParameters(host='rabbitmq'))
+        break  # 연결 성공 시 반복 종료
+    except pika.exceptions.AMQPConnectionError:
+        print(f"[!] RabbitMQ 연결 실패, 재시도 {i+1}/{MAX_RETRIES}...")
+        time.sleep(3)
+else:
+    raise Exception("RabbitMQ 연결 실패: 모든 재시도 실패")
+
+channel = connection.channel()
+channel.queue_declare(queue='hello')
 
 def callback(ch, method, properties, body):
-    logging.info(f" [x] Received {body.decode()}")
-    ch.basic_ack(delivery_tag=method.delivery_tag)
-
-for attempt in range(5):
     try:
-        logging.info("Connecting to RabbitMQ...")
-        # 서비스명 주의 (project_rabbitmq로 수정!)
-        connection = pika.BlockingConnection(pika.ConnectionParameters('project_rabbitmq'))
-        channel = connection.channel()
+        message = json.loads(body.decode())
+        print(f"[x] Received JSON:")
+        print(f"Event: {message['event']}")
+        print(f"Timestamp: {message['timestamp']}")
+        print(f"Order ID: {message['payload']['order_id']}")
+        print(f"User: {message['payload']['user']}")
+        print(f"Amount: {message['payload']['amount']} USD")
+    except json.JSONDecodeError:
+        print(f"[!] Invalid JSON: {body.decode()}")
 
-        channel.queue_declare(queue='task_queue', durable=True)
-        channel.basic_qos(prefetch_count=1)
-        channel.basic_consume(queue='task_queue', on_message_callback=callback)
+channel.basic_consume(queue='hello',
+                      on_message_callback=callback,
+                      auto_ack=True)
 
-        logging.info(' [*] Waiting for messages. To exit press CTRL+C')
-        channel.start_consuming()
-    except pika.exceptions.AMQPConnectionError as e:
-        logging.error(f"Connection failed (Attempt {attempt+1}/5), retrying in 5 seconds... Error: {e}")
-        time.sleep(5)
-    except KeyboardInterrupt:
-        logging.info("Consumer stopped by user.")
-        break
-else:
-    logging.critical("Unable to connect to RabbitMQ after 5 attempts.")
+print('[*] Waiting for JSON messages. To exit press CTRL+C')
+channel.start_consuming()
 
