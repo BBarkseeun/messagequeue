@@ -1,30 +1,31 @@
+import logging
 import pika
 import time
 
-def main():
-    # RabbitMQ 연결
-    connection = pika.BlockingConnection(pika.ConnectionParameters(host='rabbitmq'))
-    channel = connection.channel()
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s'
+)
 
-    # 큐 선언
-    channel.queue_declare(queue='task_queue', durable=True)
+# 무한 반복 메시지 전송
+while True:
+    try:
+        connection = pika.BlockingConnection(pika.ConnectionParameters('project_rabbitmq'))
+        channel = connection.channel()
 
-    # 메시지 발행
-    for i in range(10):
-        message = f"Message {i+1}"
+        channel.queue_declare(queue='task_queue', durable=True)
         channel.basic_publish(
             exchange='',
             routing_key='task_queue',
-            body=message,
-            properties=pika.BasicProperties(
-                delivery_mode=2,  # 메시지 영속성 설정
-            )
+            body='Hello RabbitMQ!',
+            properties=pika.BasicProperties(delivery_mode=2)
         )
-        print(f" [x] Sent {message}")
-        time.sleep(1)  # 메시지 간에 1초 딜레이
 
-    connection.close()
+        logging.info("[x] Sent 'Hello RabbitMQ!'")
+        connection.close()
 
-if __name__ == "__main__":
-    main()
+        time.sleep(5)  # 5초마다 메시지 반복 전송
+    except pika.exceptions.AMQPConnectionError as e:
+        logging.error(f"Connection failed: {e}, retrying in 5 seconds...")
+        time.sleep(5)
 

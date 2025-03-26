@@ -1,35 +1,41 @@
 version: "3.8"
+
 services:
   rabbitmq:
-    image: rabbitmq:3-management   # RabbitMQ 공식 이미지 사용
-    container_name: rabbitmq
+    image: rabbitmq:3-management
     ports:
-      - "5672:5672"   # RabbitMQ 기본 포트
-      - "15672:15672"  # RabbitMQ 관리 콘솔 포트
+      - "5672:5672"
+      - "15672:15672"
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq  # RabbitMQ 데이터를 저장할 볼륨
+    networks:
+      - mq-net
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
 
   producer:
-    build: ./producer  # 프로듀서 서비스는 ./producer 디렉터리에서 빌드
-    container_name: producer
-    depends_on:
-      - rabbitmq
-    environment:
-      - RABBITMQ_HOST=rabbitmq  # RabbitMQ 서비스의 호스트 이름
+    image: 211.183.3.10:5000/producer:latest
+    networks:
+      - mq-net
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
 
   consumer:
-    build: ./consumer  # 소비자 서비스는 ./consumer 디렉터리에서 빌드
-    container_name: consumer
-    depends_on:
-      - rabbitmq
-    environment:
-      - RABBITMQ_HOST=rabbitmq  # RabbitMQ 서비스의 호스트 이름
+    image: 211.183.3.10:5000/consumer:latest
+    networks:
+      - mq-net
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
 
-volumes:
-  rabbitmq_data:
-    driver: local   # RabbitMQ 데이터를 로컬에 저장
-
+networks:
+  mq-net:
+    driver: overlay
 

@@ -1,28 +1,35 @@
+import logging
 import pika
 import time
 
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s'
+)
+
 def callback(ch, method, properties, body):
-    print(f" [x] Received {body.decode()}")
-    # 메시지 처리 (2초간 처리 시뮬레이션)
-    time.sleep(2)
-    print(" [x] Done")
-    ch.basic_ack(delivery_tag=method.delivery_tag)  # 메시지 처리 완료 후 ack 전송
+    logging.info(f" [x] Received {body.decode()}")
+    ch.basic_ack(delivery_tag=method.delivery_tag)
 
-def main():
-    # RabbitMQ 연결
-    connection = pika.BlockingConnection(pika.ConnectionParameters(host='rabbitmq'))
-    channel = connection.channel()
+for attempt in range(5):
+    try:
+        logging.info("Connecting to RabbitMQ...")
+        # 서비스명 주의 (project_rabbitmq로 수정!)
+        connection = pika.BlockingConnection(pika.ConnectionParameters('project_rabbitmq'))
+        channel = connection.channel()
 
-    # 큐 선언
-    channel.queue_declare(queue='task_queue', durable=True)
+        channel.queue_declare(queue='task_queue', durable=True)
+        channel.basic_qos(prefetch_count=1)
+        channel.basic_consume(queue='task_queue', on_message_callback=callback)
 
-    # 한 번에 하나의 메시지만 처리하도록 설정
-    channel.basic_qos(prefetch_count=1)
-    channel.basic_consume(queue='task_queue', on_message_callback=callback)
-
-    print(' [*] Waiting for messages. To exit press CTRL+C')
-    channel.start_consuming()
-
-if __name__ == "__main__":
-    main()
+        logging.info(' [*] Waiting for messages. To exit press CTRL+C')
+        channel.start_consuming()
+    except pika.exceptions.AMQPConnectionError as e:
+        logging.error(f"Connection failed (Attempt {attempt+1}/5), retrying in 5 seconds... Error: {e}")
+        time.sleep(5)
+    except KeyboardInterrupt:
+        logging.info("Consumer stopped by user.")
+        break
+else:
+    logging.critical("Unable to connect to RabbitMQ after 5 attempts.")
 
