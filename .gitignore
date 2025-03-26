@@ -1,0 +1,11 @@
+# Docker
+.docker/
+docker-compose.override.yml
+*.log
+
+# Python
+__pycache__/
+*.pyc
+
+# 기타 필요한 파일 추가
+
