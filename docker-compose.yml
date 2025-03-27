@@ -35,7 +35,51 @@ services:
       restart_policy:
         condition: on-failure
 
+  influxdb:
+    image: influxdb:1.8
+    ports:
+      - "8086:8086"
+    environment:
+      INFLUXDB_DB: telegraf
+      INFLUXDB_USER: telegraf
+      INFLUXDB_USER_PASSWORD: telegraf
+    volumes:
+      - influxdb-data:/var/lib/influxdb
+    networks:
+      - mq-net
+    deploy:
+      replicas: 1
+
+  telegraf:
+    image: telegraf:latest
+    depends_on:
+      - rabbitmq
+      - influxdb
+    volumes:
+      - ./telegraf.conf:/etc/telegraf/telegraf.conf:ro
+    networks:
+      - mq-net
+    deploy:
+      replicas: 1
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    depends_on:
+      - influxdb
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - mq-net
+    deploy:
+      replicas: 1
+
 networks:
   mq-net:
     driver: overlay
+
+volumes:
+  influxdb-data:
+  grafana-data:
 
