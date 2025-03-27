@@ -15,7 +15,7 @@ else:
     raise Exception("RabbitMQ 연결 실패: 모든 재시도 실패")
 
 channel = connection.channel()
-channel.queue_declare(queue='hello')
+channel.queue_declare(queue='hello', durable=True)
 
 def callback(ch, method, properties, body):
     try:
